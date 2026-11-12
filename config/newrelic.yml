@@ -25,6 +25,7 @@ common: &default_settings
   allow_all_headers: true
   attributes:
     exclude:
+      - request.uri
       - request.headers.cookie
       - request.headers.authorization
       - request.headers.proxyAuthorization
