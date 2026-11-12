@@ -16,7 +16,7 @@ require 'faraday/multipart'
 # The service will terminate if any of the attachment requests fail when the message has multiple attachments
 # We will create multiple messages in telegram if the message has multiple attachments (if its documents or mixed media).
 class Telegram::SendAttachmentsService
-  pattr_initialize [:message!]
+  pattr_initialize [:message!, :caption]
 
   def perform
     attachment_message_id = nil
@@ -40,10 +40,16 @@ class Telegram::SendAttachmentsService
 
   def send_attachments(type, attachments)
     if [:media, :audio].include?(type)
-      media_group_request(channel.chat_id(message), attachments, channel.reply_to_message_id(message))
+      media_group_request(channel.chat_id(message), with_caption(type, attachments), channel.reply_to_message_id(message))
     else
       send_individual_attachments(attachments)
     end
+  end
+
+  def with_caption(type, attachments)
+    return attachments unless type == :media && caption.present?
+
+    [attachments.first.merge(caption: caption, parse_mode: 'HTML'), *attachments.drop(1)]
   end
 
   def group_attachments_by_type

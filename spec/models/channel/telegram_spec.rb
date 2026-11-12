@@ -62,7 +62,7 @@ RSpec.describe Channel::Telegram do
 
       stub_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")
         .with(
-          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&reply_to_message_id='
+          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id='
         )
         .to_return(
           status: 200,
@@ -81,7 +81,7 @@ RSpec.describe Channel::Telegram do
         .with(
           body: "chat_id=123&text=#{
             ERB::Util.url_encode('<strong>test</strong> <em>test</em> ~test~')
-          }&reply_markup=&parse_mode=HTML&reply_to_message_id="
+          }&reply_markup=&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id="
         )
         .to_return(
           status: 200,
@@ -100,7 +100,7 @@ RSpec.describe Channel::Telegram do
         .with(
           body: "chat_id=123&text=#{
             ERB::Util.url_encode("&lt;a&gt;\n&lt;b&gt;&lt;/b&gt;&lt;/a&gt;asdf")
-          }&reply_markup=&parse_mode=HTML&reply_to_message_id="
+          }&reply_markup=&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id="
         )
         .to_return(
           status: 200,
@@ -122,7 +122,7 @@ RSpec.describe Channel::Telegram do
         .with(
           body: 'chat_id=123&text=test' \
                 '&reply_markup=%7B%22one_time_keyboard%22%3Atrue%2C%22inline_keyboard%22%3A%5B%5B%7B%22text%22%3A%22test%22%2C%22' \
-                'callback_data%22%3A%22test%22%7D%5D%5D%7D&parse_mode=HTML&reply_to_message_id='
+                'callback_data%22%3A%22test%22%7D%5D%5D%7D&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id='
         )
         .to_return(
           status: 200,
@@ -140,7 +140,7 @@ RSpec.describe Channel::Telegram do
 
       stub_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")
         .with(
-          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&reply_to_message_id=&business_connection_id=eooW3KF5WB5HxTD7T826'
+          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id=&business_connection_id=eooW3KF5WB5HxTD7T826'
         )
         .to_return(
           status: 200,
@@ -157,7 +157,7 @@ RSpec.describe Channel::Telegram do
 
       stub_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")
         .with(
-          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&reply_to_message_id='
+          body: 'chat_id=123&text=test&reply_markup=&parse_mode=HTML&link_preview_options=%7B%22is_disabled%22%3Atrue%7D&reply_to_message_id='
         )
         .to_return(
           status: 403,
@@ -188,6 +188,47 @@ RSpec.describe Channel::Telegram do
       allow(Telegram::SendAttachmentsService).to receive(:new).with(message: message).and_return(telegram_attachment_service)
       allow(telegram_attachment_service).to receive(:perform).and_return('telegram_456')
       expect(telegram_channel.send_message_on_telegram(message)).to eq('telegram_456')
+    end
+  end
+
+  context 'when message contains text and media attachments' do
+    let(:message) do
+      create(:message, message_type: :outgoing, content: content,
+                       conversation: create(:conversation, inbox: telegram_channel.inbox, additional_attributes: { 'chat_id' => '123' }))
+    end
+    let(:telegram_attachment_service) { double }
+
+    before do
+      attachment = message.attachments.new(account_id: message.account_id, file_type: :image)
+      attachment.file.attach(io: Rails.root.join('spec/assets/avatar.png').open, filename: 'avatar.png', content_type: 'image/png')
+      allow(telegram_attachment_service).to receive(:perform).and_return('telegram_456')
+    end
+
+    context 'when the text fits a caption' do
+      let(:content) { '**Station** · `EF3227`' }
+
+      it 'sends the text as the media caption instead of a separate message' do
+        allow(Telegram::SendAttachmentsService).to receive(:new)
+          .with(message: message, caption: '<strong>Station</strong> · <code>EF3227</code>')
+          .and_return(telegram_attachment_service)
+
+        expect(telegram_channel.send_message_on_telegram(message)).to eq('telegram_456')
+        expect(a_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")).not_to have_been_made
+      end
+    end
+
+    context 'when the text is longer than a caption' do
+      let(:content) { 'a' * 1025 }
+
+      it 'sends the text and the media separately' do
+        stub_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")
+          .to_return(status: 200, body: { 'ok' => true, 'result' => { 'message_id' => 'telegram_123' } }.to_json,
+                     headers: { 'Content-Type' => 'application/json' })
+        allow(Telegram::SendAttachmentsService).to receive(:new).with(message: message).and_return(telegram_attachment_service)
+
+        expect(telegram_channel.send_message_on_telegram(message)).to eq('telegram_456')
+        expect(a_request(:post, "https://api.telegram.org/bot#{telegram_channel.bot_token}/sendMessage")).to have_been_made.once
+      end
     end
   end
 end
