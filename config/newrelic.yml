@@ -9,17 +9,32 @@
 
 common: &default_settings
   # Required license key associated with your New Relic account.
-  license_key: <%= ENV['NEW_RELIC_LICENSE_KEY'] %>
+  license_key: <%= ENV.fetch('NEW_RELIC_LICENSE_KEY', ENV.fetch('NEW_RELIC_KEY', nil)) %>
 
   # Your application name. Renaming here affects where data displays in New
   # Relic.  For more details, see https://docs.newrelic.com/docs/apm/new-relic-apm/maintenance/renaming-applications
-  app_name:  <%= ENV.fetch('NEW_RELIC_APP_NAME', 'Chatwoot')  %>
+  app_name:  <%= ENV.fetch('NEW_RELIC_APP_NAME', ENV.fetch('NEW_RELIC_APP', 'Chatwoot'))  %>
 
   distributed_tracing:
     enabled: true
 
   # To disable the agent regardless of other settings, uncomment the following:
-  agent_enabled: <%= ENV['NEW_RELIC_LICENSE_KEY'].present? && ENV.fetch('NEW_RELIC_AGENT_ENABLED', true)  %>
+  agent_enabled: <%= ENV.fetch('NEW_RELIC_LICENSE_KEY', ENV.fetch('NEW_RELIC_KEY', nil)).present? && ENV.fetch('NEW_RELIC_AGENT_ENABLED', true)  %>
+
+  # Capture all request headers, but never sensitive ones (same as billing-service)
+  allow_all_headers: true
+  attributes:
+    exclude:
+      - request.headers.cookie
+      - request.headers.authorization
+      - request.headers.proxyAuthorization
+      - request.headers.setCookie*
+      - request.headers.x*
+      - response.headers.cookie
+      - response.headers.authorization
+      - response.headers.proxyAuthorization
+      - response.headers.setCookie*
+      - response.headers.x*
 
   # Logging level for log/newrelic_agent.log
   log_level: <%= ENV.fetch('NEW_RELIC_LOG_LEVEL', 'info')  %>
@@ -48,7 +63,7 @@ common: &default_settings
 # If your application has other named environments, configure them here.
 development:
   <<: *default_settings
-  app_name: <%= ENV.fetch('NEW_RELIC_APP_NAME', 'Chatwoot')  %> (Development)
+  app_name: <%= ENV.fetch('NEW_RELIC_APP_NAME', ENV.fetch('NEW_RELIC_APP', 'Chatwoot'))  %> (Development)
 
 test:
   <<: *default_settings
@@ -57,7 +72,7 @@ test:
 
 staging:
   <<: *default_settings
-  app_name: <%= ENV.fetch('NEW_RELIC_APP_NAME', 'Chatwoot')  %> (Staging)
+  app_name: <%= ENV.fetch('NEW_RELIC_APP_NAME', ENV.fetch('NEW_RELIC_APP', 'Chatwoot'))  %> (Staging)
 
 production:
   <<: *default_settings
