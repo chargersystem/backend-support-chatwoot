@@ -53,8 +53,8 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different cache store in production.
-  # config.cache_store = :mem_cache_store
+  # Share the cache across web and worker pods. Lazy so lib/ is autoloadable when the store connects.
+  config.cache_store = :redis_cache_store, { redis: -> { Redis.new(Redis::Config.app) }, namespace: 'cache' }
 
   # Use a real queuing backend for Active Job (and separate queues per environment)
   config.active_job.queue_adapter = :sidekiq
