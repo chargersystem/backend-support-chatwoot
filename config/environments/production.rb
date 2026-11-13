@@ -44,6 +44,7 @@ Rails.application.configure do
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
   config.force_ssl = ActiveModel::Type::Boolean.new.cast(ENV.fetch('FORCE_SSL', false))
+  config.ssl_options = { redirect: { exclude: ->(request) { request.path == '/health' } } }
 
   # Use the lowest log level to ensure availability of diagnostic information
   # when problems arise.
@@ -52,8 +53,8 @@ Rails.application.configure do
   # Prepend all log lines with the following tags.
   config.log_tags = [:request_id]
 
-  # Use a different cache store in production.
-  # config.cache_store = :mem_cache_store
+  # Share the cache across web and worker pods. Lazy so lib/ is autoloadable when the store connects.
+  config.cache_store = :redis_cache_store, { redis: -> { Redis.new(Redis::Config.app) }, namespace: 'cache' }
 
   # Use a real queuing backend for Active Job (and separate queues per environment)
   config.active_job.queue_adapter = :sidekiq

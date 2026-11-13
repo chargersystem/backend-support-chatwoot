@@ -77,16 +77,20 @@ class Telegram::IncomingMessageService
   end
 
   def set_conversation
-    # if lock to single conversation is disabled, we will create a new conversation if previous conversation is resolved
-    @conversation = if @inbox.lock_to_single_conversation
-                      @contact_inbox.conversations.last
-                    else
-                      @contact_inbox.conversations
-                                    .where.not(status: :resolved).last
-                    end
-    return if @conversation
+    # Telegram delivers album items and quick consecutive messages as parallel updates.
+    # The row lock serializes lookup and creation per contact inbox, so parallel jobs share one conversation.
+    @contact_inbox.with_lock do
+      @conversation = find_conversation || ::Conversation.create!(conversation_params)
+    end
+  end
 
-    @conversation = ::Conversation.create!(conversation_params)
+  def find_conversation
+    # if lock to single conversation is disabled, we will create a new conversation if previous conversation is resolved
+    if @inbox.lock_to_single_conversation
+      @contact_inbox.conversations.last
+    else
+      @contact_inbox.conversations.where.not(status: :resolved).last
+    end
   end
 
   def contact_attributes
