@@ -22,6 +22,8 @@ class Channel::Telegram < ApplicationRecord
 
   self.table_name = 'channel_telegram'
   EDITABLE_ATTRS = [:bot_token].freeze
+  MAX_CAPTION_LENGTH = 1024
+  MEDIA_FILE_TYPES = %w[image video].freeze
 
   before_validation :ensure_valid_bot_token, on: :create
   validates :bot_token, presence: true, uniqueness: true
@@ -36,6 +38,8 @@ class Channel::Telegram < ApplicationRecord
   end
 
   def send_message_on_telegram(message)
+    return Telegram::SendAttachmentsService.new(message: message, caption: message.outgoing_content).perform if media_caption?(message)
+
     message_id = send_message(message) if message.outgoing_content.present?
     message_id = Telegram::SendAttachmentsService.new(message: message).perform if message.attachments.present?
     message_id
@@ -81,6 +85,12 @@ class Channel::Telegram < ApplicationRecord
   end
 
   private
+
+  def media_caption?(message)
+    content = message.outgoing_content
+    content.present? && content.length <= MAX_CAPTION_LENGTH && message.attachments.present? &&
+      message.attachments.all? { |attachment| MEDIA_FILE_TYPES.include?(attachment.file_type) }
+  end
 
   def ensure_valid_bot_token
     response = HTTParty.get("#{telegram_api_url}/getMe")
@@ -165,6 +175,7 @@ class Channel::Telegram < ApplicationRecord
                     text: text,
                     reply_markup: reply_markup,
                     parse_mode: 'HTML',
+                    link_preview_options: { is_disabled: true }.to_json,
                     reply_to_message_id: reply_to_message_id
                   }.merge(business_body))
   end

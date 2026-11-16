@@ -72,6 +72,23 @@ RSpec.describe Telegram::SendAttachmentsService do
       end
     end
 
+    context 'when a caption is given for photos' do
+      let(:service) { described_class.new(message: message, caption: '<strong>EF3227</strong>') }
+
+      before do
+        2.times { attach_file_to_message(message, 'image', 'sample.png', 'image/png') }
+        message.save!
+      end
+
+      it 'puts the caption with HTML parse mode on the first media item only' do
+        service.perform
+        expect(a_request(:post, "#{telegram_api_url}/sendMediaGroup").with do |req|
+          media = JSON.parse(Rack::Utils.parse_nested_query(req.body)['media'])
+          media.first['caption'] == '<strong>EF3227</strong>' && media.first['parse_mode'] == 'HTML' && !media.last.key?('caption')
+        end).to have_been_made.once
+      end
+    end
+
     context 'when all attachments are audio' do
       before do
         2.times { attach_file_to_message(message, 'audio', 'sample.mp3', 'audio/mpeg') }

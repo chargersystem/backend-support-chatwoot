@@ -1,0 +1,43 @@
+# Example hook for the Chatwoot chart in the manifests repository.
+# Runs after the migrations hook on every install/upgrade; an unchanged installation is a no-op.
+# Set hook-weight greater than the weight of the migrations Job.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chatwoot-support-ai-setup
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "10"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: support-ai-setup
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command: ["bundle", "exec", "rails", "runner", "script/setup_support_ai.rb", "--apply"]
+          envFrom:
+            - secretRef:
+                name: chatwoot-env
+            - secretRef:
+                name: chatwoot-support-ai
+          env:
+            - name: RAILS_ENV
+              value: production
+            - name: CHATWOOT_ACCOUNT_NAME
+              value: ChargerSystem
+            - name: TELEGRAM_INBOX_NAME
+              value: ChargerSystem Telegram
+            - name: CHATWOOT_AGENT_BOT_NAME
+              value: ChargerSystem AI Bot
+            - name: GATEWAY_PUBLIC_URL
+              value: "https://<ai-gateway public origin>"
+            - name: CHATWOOT_ACCOUNT_ID
+              value: "1"
+            - name: CHATWOOT_INBOX_ID
+              value: "1"
+            - name: CHATWOOT_BOT_ID
+              value: "1"

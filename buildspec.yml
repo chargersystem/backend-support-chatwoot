@@ -1,0 +1,25 @@
+version: 0.2
+env:
+  shell: bash
+  variables:
+    GITHUB_TOKEN: "GITHUB_TOKEN"
+phases:
+  pre_build:
+    commands:
+    - export IMAGE_TAG="$(git rev-parse --short=12 HEAD)-$(date -u +%Y%m%d%H%M%S)"
+    - export ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${DEFAULT_REGION}.amazonaws.com"
+    - export ECR_FULL_REPO="${ECR_REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}"
+    - export ECR_FULL_REPO_LATEST="${ECR_REGISTRY}/${IMAGE_NAME}:latest"
+    - aws ecr get-login-password --region "${DEFAULT_REGION}" | docker login --username AWS --password-stdin "${ECR_REGISTRY}"
+  build:
+    commands:
+    - rm -rf enterprise spec/enterprise
+    - printf '\nENV CW_EDITION=ce\n' >> docker/Dockerfile
+    - docker build --platform linux/amd64 --tag "${ECR_FULL_REPO}" -f docker/Dockerfile .
+    - docker tag "${ECR_FULL_REPO}" "${ECR_FULL_REPO_LATEST}"
+  post_build:
+    commands:
+    - test "$CODEBUILD_BUILD_SUCCEEDING" = "1"
+    - docker push "${ECR_FULL_REPO}"
+    - docker push "${ECR_FULL_REPO_LATEST}"
+    - bash ./update-argocd-manifest.sh

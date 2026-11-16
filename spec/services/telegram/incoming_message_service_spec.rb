@@ -691,6 +691,28 @@ describe Telegram::IncomingMessageService do
         expect(telegram_channel.inbox.conversations.last.messages.count).to eq(2)
         expect(telegram_channel.inbox.conversations.last.messages.last.content).to eq('second message')
       end
+
+      it 'resolves the conversation under a contact inbox lock' do
+        params = {
+          'update_id' => 2_342_342_343_242,
+          'message' => { 'text' => 'first message' }.merge(message_params)
+        }.with_indifferent_access
+        described_class.new(inbox: telegram_channel.inbox, params: params).perform
+        locked = []
+        allow_any_instance_of(ContactInbox).to receive(:with_lock).and_wrap_original do |method, *args, &block|
+          locked << method.receiver.id
+          method.call(*args, &block)
+        end
+
+        album_params = {
+          'update_id' => 2_342_342_343_243,
+          'message' => { 'media_group_id' => '1', 'caption' => 'album' }.merge(message_params)
+        }.with_indifferent_access
+        described_class.new(inbox: telegram_channel.inbox, params: album_params).perform
+
+        expect(locked).to eq([ContactInbox.find_by!(inbox: telegram_channel.inbox, source_id: '23').id])
+        expect(telegram_channel.inbox.conversations.count).to eq(1)
+      end
     end
 
     context 'when lock_to_single_conversation is true' do
